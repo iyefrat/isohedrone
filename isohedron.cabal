@@ -18,6 +18,8 @@ common common-options
     base                 >= 4.11 && < 4.16
    ,dice                 >= 0.1.0.1
    ,discord-haskell
+   ,unliftio
+   ,text
 
   
   ghc-options:         -Wall
@@ -29,6 +31,30 @@ common common-options
                        -Wmissing-export-lists
                        -Wpartial-fields
                        -Wmissing-deriving-strategies
+
+  default-extensions:
+    LambdaCase
+    FlexibleInstances
+    FlexibleContexts
+    InstanceSigs
+    MultiParamTypeClasses
+    EmptyCase
+    OverloadedStrings
+    NamedFieldPuns
+    MultiWayIf
+    TupleSections
+    DeriveFoldable
+    DeriveFunctor
+    DeriveTraversable
+    DeriveGeneric
+    GeneralizedNewtypeDeriving
+    DerivingStrategies
+    BangPatterns
+    KindSignatures
+    TypeOperators
+    ScopedTypeVariables
+    TemplateHaskell
+    RankNTypes
 
   default-language:    Haskell2010
 
