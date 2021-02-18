@@ -1,14 +1,15 @@
 module Main (main) where
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Reader
 import Data.Random.Dice
+import Data.Either
 import System.Environment
 import System.Exit
-import Control.Monad (when, forM_)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
-import UnliftIO (liftIO)
+import UnliftIO
 import UnliftIO.Concurrent
 
 import Discord
@@ -40,7 +41,7 @@ startHandler :: DiscordHandler ()
 startHandler = do
   Right partialGuilds <- restCall R.GetCurrentUserGuilds
 
-  let activity = Activity { activityName = "ping-pong"
+  let activity = Activity { activityName = "rolling in the deep"
                           , activityType = ActivityTypeGame
                           , activityUrl = Nothing
                           }
@@ -54,34 +55,61 @@ startHandler = do
   forM_ partialGuilds $ \pg -> do
     Right guild <- restCall $ R.GetGuild (partialGuildId pg)
     Right chans <- restCall $ R.GetGuildChannels (guildId guild)
-    case filter isTextChannel chans of
-      (c:_) -> do _ <- restCall $ R.CreateMessage (channelId c) "Hello! I will reply to pings with pongs"
-                  pure ()
-      _ -> pure ()
+    pure ()
+
+-- we can't use this unless the type of discordOnEnd changes
+endHandler :: DiscordHandler ()
+endHandler = do
+  Right partialGuilds <- restCall R.GetCurrentUserGuilds
+
+  let activity = Activity { activityName = "rolling in the deep"
+                          , activityType = ActivityTypeGame
+                          , activityUrl = Nothing
+                          }
+
+  let opts = UpdateStatusOpts { updateStatusOptsSince = Nothing
+                              , updateStatusOptsGame = Just activity
+                              , updateStatusOptsNewStatus = UpdateStatusOffline
+                              , updateStatusOptsAFK = False
+                              }
+  sendCommand (UpdateStatus opts)
+
+  forM_ partialGuilds $ \pg -> do
+    Right guild <- restCall $ R.GetGuild (partialGuildId pg)
+    Right chans <- restCall $ R.GetGuildChannels (guildId guild)
+    pure ()
 
 -- If an event handler throws an exception, discord-haskell will continue to run
 eventHandler :: Event -> DiscordHandler ()
 eventHandler event = case event of
-      MessageCreate m -> when (not (fromBot m) && isPing m) $ do
+      MessageCreate m -> when (not (fromBot m) && forBot m) $ do
         _ <- restCall (R.CreateReaction (messageChannel m, messageId m) "eyes")
         threadDelay (4 * 10^(6 :: Int))
-        _ <- restCall (R.CreateMessage (messageChannel m) "Pong!")
+        diceroll <- liftIO $ (T.pack <$>) <$> rollEm (unwords . drop 1 . words . T.unpack $ messageText m)
+        _ <- restCall (R.CreateMessage (messageChannel m) (rollmessage m diceroll))
         pure ()
       _ -> pure ()
 
 isTextChannel :: Channel -> Bool
-isTextChannel (ChannelText {}) = True
+isTextChannel ChannelText {} = True
 isTextChannel _ = False
 
 fromBot :: Message -> Bool
 fromBot m = userIsBot (messageAuthor m)
 
-isPing :: Message -> Bool
-isPing = ("ping" `T.isPrefixOf`) . T.toLower . messageText
+forBot :: Message -> Bool
+forBot = ("/r" `T.isPrefixOf`) . T.toLower . messageText
 
+rollmessage :: Message -> Either a T.Text -> T.Text
+rollmessage m diceroll =
+  case diceroll of
+    Left _ -> T.unlines usage
+    Right rolled -> (userName . messageAuthor $ m) <> " rolled a " <> rolled
+
+usage :: [T.Text]
 usage =
     [ "Usage:"
-    , "  dice <expr>"
+    , " /r <expr>"
     , ""
     , "  where <expr> is a simple mathematical expression involving"
     , "  integers and die rolling primitives of the form [<n>]d<s>."
@@ -91,25 +119,3 @@ usage =
     , "  For example:"
     , "  $ dice \"2d10 + 2 * (d100 / d6)\""
     ]
-
-
-main2 = do
-    expr <- concat <$> getArgs
-    when (null expr) exitWithUsage
-    result <- rollEm expr
-    either exitWithErr putStrLn result
-
-printUsage = mapM_ putStrLn usage
-
-exitWithUsage = do
-    printUsage
-    exitWith (ExitFailure 1)
-
-printErr e = do
-    print e
-    putStrLn ""
-    printUsage
-
-exitWithErr e = do
-    printErr e
-    exitWith (ExitFailure 2)

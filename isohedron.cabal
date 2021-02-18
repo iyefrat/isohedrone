@@ -20,6 +20,7 @@ common common-options
    ,discord-haskell
    ,unliftio
    ,text
+   ,mtl
 
   
   ghc-options:         -Wall
